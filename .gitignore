@@ -19,6 +19,10 @@ ENV/
 log_transcription.jsonl
 mock.wav
 
+# Agent & Internal Docs
+.agent/
+docs/
+
 # IDE / Editor
 .vscode/
 .idea/
