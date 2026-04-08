@@ -1,64 +1,65 @@
-# FutuGen - Audio Streaming & AI Classification Pipeline
+# FutuGen - Real-time Audio Diarization & Classification Pipeline
 
-This project implements a complete asynchronous pipeline for processing audio streams, real-time transcription (STT), and intelligent conversation classification.
+Tento projekt implementuje vysoce výkonnou pipeline pro reálný čas, která zpracovává audio stream (mikrofon nebo soubor), provádí transkripci s rozlišením mluvčích (diarizace) a následně text klasifikuje pomocí LLM (detekce tématu a soukromých údajů).
 
-## Core Features
-- **Real-time Streaming**: Support for microphone input, file upload, and simulated (Mock) stream.
-- **Deepgram Nova-2 Engine**: High-performance Czech transcription with sub-second latency.
-- **Integrated Diarization**: Automatic speaker separation (S1, S2...) within the stream.
-- **Incremental Classification**: Real-time analysis (Private vs. Topic-Based) using GPT-4o-mini.
-- **Modern UI**: React (Vite) dashboard for real-time visualization.
+## Hlavní Funkce
+- **Nízká Latence**: Pod-sekundová odezva díky Deepgram Nova-2 WebSocket streamingu.
+- **Hybridní Diarizace**: Automatické rozlišení mluvčích S1/S2/S3... pro Mono i Stereo vstupy.
+- **Inkrementální Klasifikace**: Analýza textu v reálném čase (Téma vs. Soukromé údaje) pomocí GPT-4o-mini.
+- **Moderní UI**: Dashboard v Reactu (Vite) pro vizualizaci dat a ovládání zdroje zvuku.
 
-## Architecture
-The system uses `asyncio` and consists of three main modules:
-1. **Audio Streamer**: Handles intake, normalization (16kHz Mono), and chunking.
-2. **Transcription Engine**: Integrates Deepgram WebSocket for parallel transcription and diarization.
-3. **Classifier**: Sliding-window text analysis producing structured JSON output.
+## Architektura a Design
+Projekt dodržuje princip **Separation of Concerns (SoC)** pro zajištění udržitelnosti:
 
-### Technology Choice: Deepgram Nova-2 vs. OpenAI Whisper
-While the initial project requirements mentioned OpenAI Whisper, our architectural analysis favored **Deepgram Nova-2** for this specific real-time use case. Key reasons include:
+1. **`main.py` (Orchestrátor)**: Vstupní bod FastAPI serveru. Spravuje WebSocket spojení a asynchronní workery.
+2. **`functions.py` (Motor)**: Jádro logiky pro zpracování audia, Deepgram STT a resamplování.
+3. **`models.py` (Schéma)**: Definice datových modelů (Pydantic), které sdílí Backend, Frontend i Evaluace.
+4. **`prompts.py` (Mozek)**: Centrální úložiště systémových promptů pro LLM klasifikaci.
 
-1. **Sub-second Latency**: OpenAI's Whisper API (REST-based) requires multi-second audio segments to be uploaded, leading to significant chunking delays. Deepgram uses a constant WebSocket stream, allowing for sub-500ms end-to-end latency.
-2. **Streaming Diarization**: Deepgram provides native speaker diarization within its live streaming results. Achieving this with Whisper would require an additional post-processing step (like Pyannote), which breaks the real-time experience.
-3. **Advanced Multichannel Support**: Our implementation supports true stereo input, mapping left/right channels directly to speaker IDs—a feature not natively supported by streaming Whisper implementations.
+### Workflow Pipeline
+Audio Intake ➔ Whisper Queue ➔ Transcription Engine ➔ Broadcast Queue ➔ LLM Classifier ➔ Frontend
 
-**Note on Modularity**: The system architecture is fully modular. Should the project requirements strictly mandate OpenAI Whisper, the `transcription_engine_worker` in `functions.py` can be easily swapped back. However, for the purpose of this case study, Deepgram was chosen to demonstrate a production-grade, lowest-latency solution that exceeds the baseline requirements.
+## Technologické rozhodnutí: Deepgram vs. OpenAI Whisper
+I když zadání zmiňovalo OpenAI Whisper, zvolili jsme **Deepgram Nova-2** z těchto důvodů:
+1. **Rychlost**: Whisper API vyžaduje chunkování a nahrávání celých bloků, což vytváří lag několik sekund. Deepgram streamuje neustále s latencí pod 500ms.
+2. **Diarizace**: Deepgram nabízí nativní diarizaci přímo v streamu. S Whisperem by bylo nutné zapojit další model (např. Pyannote), což by latenci ještě zvýšilo.
+3. **Stereo Podpora**: Naše implementace plně využívá stereo kanály pro perfektní oddělení operátora a klienta.
 
-## Installation and Setup
+**Poznámka k modularitě**: Systém je plně modulární. Pokud by bylo striktně vyžadováno OpenAI Whisper, lze `transcription_engine_worker` v `functions.py` snadno vyměnit.
 
-### Prerequisites
+## Instalace a Spuštění
+
+### Prerekvizity
 - Python 3.10+
-- Node.js (frontend)
-- API keys in `.env` (Deepgram, OpenAI)
+- Node.js & npm
+- API klíče pro Deepgram a OpenAI
 
-### Backend
+### Nastavení
+1. Vytvořte `.env` soubor podle `.env.example`:
+```env
+OPENAI_API_KEY=vaš_klíč
+DEEPGRAM_API_KEY=vaš_klíč
+```
+2. Instalace závislostí:
 ```bash
-python -m venv venv
-source venv/bin/activate  # venv\Scripts\activate on Windows
 pip install -r requirements.txt
-python main.py
 ```
 
-### Frontend
+### Spuštění
+**Backend:**
+```bash
+python main.py
+```
+**Frontend:**
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-## Evaluation and Testing
-Includes an evaluation dataset of 10 conversations with ground truth labels.
-To run the accuracy test:
+## Evaluace
+Pro ověření kvality pipeline je k dispozici suite v adresáři `tests/`:
 ```bash
 python tests/eval_script.py
 ```
-
-## Docker
-Includes `docker-compose.yml` for backend deployment.
-```bash
-docker-compose up --build
-```
-
----
-**Author:** David Kunz (FutuGen AI Team)
-**Status:** Ready for Review
+Testuje latenci, přesnost diarizace a klasifikaci na demo datasetu.
