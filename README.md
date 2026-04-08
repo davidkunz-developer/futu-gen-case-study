@@ -41,7 +41,7 @@ python main.py
 
 ### Frontend
 ```bash
-cd frontend-v2
+cd frontend
 npm install
 npm run dev
 ```
