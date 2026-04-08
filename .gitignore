@@ -17,7 +17,6 @@ ENV/
 
 # Output logs a data vygenerované během běhu/pipeline testů
 log_transcription.jsonl
-mock.wav
 
 # Agent & Internal Docs
 .agent/
