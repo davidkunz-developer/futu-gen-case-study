@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    container_name: futugen-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      # Klíče se berou z lokálního .env souboru
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - HF_TOKEN=${HF_TOKEN}
+    # Nastavení pro Docker tak, aby nevyžadoval padání sítě kvůli HuggingFace timeoutům
+    restart: always

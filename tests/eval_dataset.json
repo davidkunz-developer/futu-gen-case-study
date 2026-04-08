@@ -1,0 +1,62 @@
+[
+  {
+    "id": "eval_01",
+    "text": "S1: Dobrý den, chtěl bych probrat naši novou obchodní strategii pro rok 2026.\nS2: Samozřejmě, pane řediteli. Mám připravená data o penetraci trhu v regionu DACH.",
+    "ground_truth": "topic_based",
+    "topics": ["obchodní strategie", "penetrace trhu", "plánování 2026"]
+  },
+  {
+    "id": "eval_02",
+    "text": "S1: Hele, zítra jdeme s dětmi k té zubařce, co sídlí na Praze 4.\nS2: Jasně, nezapomeň vzít jejich kartičky pojištěnce. Lucka má tu modrou v peněžence.",
+    "ground_truth": "private",
+    "topics": ["rodina", "lékař", "soukromá schůzka"]
+  },
+  {
+    "id": "eval_03",
+    "text": "S1: Potřebuji schválit nákup 50 kusů licencí pro Microsoft 365.\nS2: Podívejte se na rozpočet IT, pokud tam je rezerva, tak to odsouhlasím přes Jiru.",
+    "ground_truth": "topic_based",
+    "topics": ["software", "licence", "rozpočet"]
+  },
+  {
+    "id": "eval_04",
+    "text": "S1: Miláčku, koupila jsem ty lístky do divadla na příští pátek.\nS2: Super, moc se těším. Půjdeme pak na večeři do té italské restaurace?",
+    "ground_truth": "private",
+    "topics": ["volný čas", "vztahy", "plánování večera"]
+  },
+  {
+    "id": "eval_05",
+    "text": "S1: Serverová latence se zvýšila o 200ms po včerejším nasazení nového mikroslužby.\nS2: Musíme provést rollback nebo aspoň prozkoumat logy v Grafaně.",
+    "ground_truth": "topic_based",
+    "topics": ["IT", "infrastruktura", "debugging"]
+  },
+  {
+    "id": "eval_06",
+    "text": "S1: Paní Nováková, vaše krevní testy dopadly dobře, ale budeme muset upravit dávkování léků na tlak.\nS2: Děkuji pane doktore, cítím se teď mnohem lépe.",
+    "ground_truth": "private",
+    "topics": ["zdraví", "lékařská konzultace", "léky"]
+  },
+  {
+    "id": "eval_07",
+    "text": "S1: Architektura nového mostu počítá s betonovou konstrukcí a ocelovými lany.\nS2: Pevnostní výpočty musí odpovídat evropským normám EN 1992.",
+    "ground_truth": "topic_based",
+    "topics": ["stavebnictví", "architektura", "normy"]
+  },
+  {
+    "id": "eval_08",
+    "text": "S1: Půjčíš mi prosím tě pětistovku? Zapomněl jsem si doma peněženku a potřebuji natankovat.\nS2: Jasně, pošli mi to pak přes QR kód na mobilu.",
+    "ground_truth": "private",
+    "topics": ["finance", "půjčka", "osobní pomoc"]
+  },
+  {
+    "id": "eval_09",
+    "text": "S1: Marketingová kampaň na surikaty bude probíhat na Facebooku a Instagramu.\nS2: Musíme optimalizovat CPS a sledovat konverzní poměr návštěvníků.",
+    "ground_truth": "topic_based",
+    "topics": ["marketing", "sociální sítě", "analytika"]
+  },
+  {
+    "id": "eval_10",
+    "text": "S1: Jmenuji se Jan Novák a bydlím na ulici Dlouhá 123 v Brně. Moje rodné číslo je 850101/1234.\nS2: Děkuji, potvrzuji vaši identitu pro založení spořícího účtu.",
+    "ground_truth": "private",
+    "topics": ["osobní údaje", "bankovnictví", "identita"]
+  }
+]

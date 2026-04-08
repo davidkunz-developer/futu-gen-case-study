@@ -1,0 +1,30 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Pytest / Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Output logs a data vygenerované během běhu/pipeline testů
+log_transcription.jsonl
+mock.wav
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS vygenerované soubory
+.DS_Store
+Thumbs.db
