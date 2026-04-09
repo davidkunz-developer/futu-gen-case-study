@@ -53,11 +53,25 @@ To run the accuracy test:
 python tests/eval_script.py
 ```
 
-## Docker
-Includes `docker-compose.yml` for backend deployment.
+## Docker & Deployment
+Aplikace je plně kontejnerizovaná a připravená pro nasazení (např. na Render).
+
+### Sestavení a spuštění
 ```bash
-docker-compose up --build
+docker build -t futugen-app .
+docker run -d --name futugen -p 8000:8000 --env-file .env futugen-app
 ```
+Aplikace bude dostupná na: `http://localhost:8000` (FastAPI + React Frontend).
+
+### ⚠️ Důležité omezení (Mikrofon v Dockeru)
+Při běhu v Dockeru **není možné** přistupovat k fyzickému mikrofonu vašeho hostitelského počítače z backendu (chybí audio passthrough). 
+
+**Pro otestování funkčnosti v Dockeru:**
+1. Klikněte na tlačítko **"Mock Stream"** – spustí se simulace z přiloženého WAV souboru.
+2. Klikněte na **"WAV File"** – nahrajte vlastní audio soubor.
+
+**Pro nahrávání z mikrofonu:**
+Musíte aplikaci spustit **nativně** (mimo Docker) podle instrukcí v sekci [Installation and Setup](#installation-and-setup).
 
 ---
 **Author:** David Kunz (FutuGen AI Team)
