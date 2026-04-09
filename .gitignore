@@ -20,6 +20,7 @@ log_transcription.jsonl
 
 # Agent & Internal Docs
 .agent/
+docs/
 
 # IDE / Editor
 .vscode/
