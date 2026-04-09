@@ -265,8 +265,15 @@ async def record_compiler_worker_broadcasting(win_q: asyncio.Queue, diar_q: asyn
 async def llm_classifier_worker(in_queue: asyncio.Queue, out_queue: asyncio.Queue):
     """LLM-based incremental classification worker using sliding window context."""
     print("[Classifier] Worker entering function...", flush=True)
+    
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        print("[Classifier] CRITICAL: OPENAI_API_KEY is missing in environment!", flush=True)
+    else:
+        print(f"[Classifier] API Key present (ends with ...{api_key[-4:]})", flush=True)
+
     try:
-        openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        openai_client = AsyncOpenAI(api_key=api_key)
         history_buffer = []
         last_analysis_time = 0
         
@@ -297,7 +304,8 @@ async def llm_classifier_worker(in_queue: asyncio.Queue, out_queue: asyncio.Queu
                         response_format={"type": "json_object"}
                     )
                     raw_payload = json.loads(response.choices[0].message.content)
-                    
+                    print(f"[Classifier] API RAW: {raw_payload}", flush=True)
+
                     result = ClassificationResult(
                         session_id=record.session_id,
                         classification=raw_payload.get("classification", "topic_based"),
