@@ -4,6 +4,7 @@ import base64
 import json
 import time
 import uuid
+import sys
 import numpy as np
 from typing import List, Optional, Set
 from pydantic import BaseModel
@@ -16,6 +17,8 @@ from deepgram import (
     LiveOptions,
     DeepgramClientOptions,
 )
+from openai import AsyncOpenAI
+from prompts import CLASSIFIER_SYSTEM_PROMPT
 
 load_dotenv()
 
@@ -28,12 +31,13 @@ def resample_audio(audio_bytes: bytes, from_rate: int, to_rate: int, num_channel
     if from_rate == to_rate: 
         return audio_np.astype(np.int16).tobytes()
         
-    num_samples = int((len(audio_np) // num_channels) * to_rate / from_rate)
+    n_frames = len(audio_np) // num_channels
+    n_frames_target = int(n_frames * to_rate / from_rate)
     
     if num_channels == 1:
         resampled_np = np.interp(
-            np.linspace(0, len(audio_np), num_samples, endpoint=False),
-            np.arange(len(audio_np)),
+            np.linspace(0, n_frames, n_frames_target, endpoint=False),
+            np.arange(n_frames),
             audio_np
         )
     else:
@@ -42,7 +46,7 @@ def resample_audio(audio_bytes: bytes, from_rate: int, to_rate: int, num_channel
         resampled_channels = []
         for i in range(num_channels):
             resampled_channels.append(np.interp(
-                np.linspace(0, len(reshaped), num_samples, endpoint=False),
+                np.linspace(0, len(reshaped), n_frames_target, endpoint=False),
                 np.arange(len(reshaped)),
                 reshaped[:, i]
             ))
@@ -54,17 +58,21 @@ async def mock_audio_streamer(wav_path: str, session_id: str, queues: List[async
     """Simulates an audio stream from a WAV file."""
     import wave
     try:
+        if not os.path.exists(wav_path):
+            print(f"[Mock] Error: File not found: {wav_path}")
+            return
+
         with wave.open(wav_path, 'rb') as wf:
             native_sr = wf.getframerate()
             n_channels = wf.getnchannels()
             chunk_duration_s = 2.0
             chunk_size_native = int(native_sr * chunk_duration_s)
-            print(f"[Mock] Starting: {wav_path} ({native_sr}Hz, {n_channels}ch -> 16000Hz, mono)")
+            print(f"[Mock] Starting: {wav_path} ({native_sr}Hz, {n_channels}ch -> 16000Hz, mono)", flush=True)
             chunk_idx = 0
             while True:
                 data = wf.readframes(chunk_size_native)
                 if not data: 
-                    print("[Mock] End of file reached.")
+                    print("[Mock] End of file reached.", flush=True)
                     break
                 data_16k = resample_audio(data, native_sr, 16000, n_channels)
                 
@@ -77,59 +85,50 @@ async def mock_audio_streamer(wav_path: str, session_id: str, queues: List[async
                     audio_data=base64.b64encode(data_16k).decode('utf-8')
                 )
                 
-                print(f"[Mock] Sending chunk {chunk_idx} to queues...")
+                print(f"[Mock] Sending chunk {chunk_idx} to queues...", flush=True)
                 for q in queues:
                     try: q.put_nowait(chunk)
                     except Exception as e: print(f"[Mock] Queue error: {e}")
                 chunk_idx += 1
                 await asyncio.sleep(chunk_duration_s)
     except Exception as e:
-        print(f"[Mock] Error: {e}")
+        print(f"[Mock] CRITICAL ERROR: {e}")
 
 async def live_mic_streamer(session_id: str, queues: List[asyncio.Queue]):
     """Streams live audio from the default microphone."""
     import pyaudio
     p = pyaudio.PyAudio()
-    TARGET_RATE = 16000
     INPUT_RATE = 16000
     try:
         stream = p.open(format=pyaudio.paInt16, channels=1, rate=INPUT_RATE, input=True, frames_per_buffer=INPUT_RATE)
-    except:
-        INPUT_RATE = 44100
+        print("[Intake] Microphone recording started...", flush=True)
+    except Exception as e:
+        print(f"[Intake] Microhpone error: {e}. If in Docker, this is EXPECTED.")
         stream = p.open(format=pyaudio.paInt16, channels=1, rate=INPUT_RATE, input=True, frames_per_buffer=INPUT_RATE)
-    
-    print(f"[Mic] Streaming: {INPUT_RATE}Hz -> {TARGET_RATE}Hz")
+
     chunk_idx = 0
-    try:
-        while True:
-            data = await asyncio.to_thread(stream.read, INPUT_RATE, exception_on_overflow=False)
-            data_16k = resample_audio(data, INPUT_RATE, TARGET_RATE, 1)
-            
+    while True:
+        try:
+            data = stream.read(INPUT_RATE, exception_on_overflow=False)
             chunk = AudioChunk(
                 session_id=session_id,
                 timestamp_start=chunk_idx * 1.0,
                 timestamp_end=(chunk_idx + 1) * 1.0,
-                sample_rate=16000,
+                sample_rate=INPUT_RATE,
                 duration_ms=1000,
-                audio_data=base64.b64encode(data_16k).decode('utf-8')
+                audio_data=base64.b64encode(data).decode('utf-8')
             )
-            for q in queues:
-                try: q.put_nowait(chunk)
-                except: pass
+            for q in queues: q.put_nowait(chunk)
             chunk_idx += 1
-    except asyncio.CancelledError:
-        print("[Mic] Stopped.")
-    finally:
-        try:
-            stream.stop_stream()
-            stream.close()
-        except: pass
-        p.terminate()
+            await asyncio.sleep(0.1)
+        except Exception as e:
+            print(f"[Intake] Loop error: {e}")
+            break
 
 async def transcription_engine_worker(in_queue: asyncio.Queue, out_queue: asyncio.Queue):
     """Deepgram-based transcription worker with integrated diarization."""
     if not DEEPGRAM_API_KEY: 
-        print("[DG Worker] CRITICAL: API key missing!")
+        print("[DG Worker] CRITICAL: API key missing!", flush=True)
         return
     client = DeepgramClient(DEEPGRAM_API_KEY)
     dg_connection = None
@@ -147,8 +146,6 @@ async def transcription_engine_worker(in_queue: asyncio.Queue, out_queue: asynci
             if not alt.transcript: return
             
             # Speaker ID mapping
-            # Pokud máme více kanálů (Stereo), bereme S1/S2 z indexu kanálu.
-            # Pokud máme jen jeden kanál (Mono Mic), vracíme se k diarizaci z Deepgramu.
             channel_idx = getattr(result, 'channel_index', [0])[0]
             speaker = 0
             
@@ -181,17 +178,17 @@ async def transcription_engine_worker(in_queue: asyncio.Queue, out_queue: asynci
                 words=audio_words
             )
             
-            print(f"[DG] {rec.speaker_id} (ch:{channel_idx}): {rec.text}")
+            print(f"[DG] {rec.speaker_id} (ch:{channel_idx}): {rec.text}", flush=True)
             loop.call_soon_threadsafe(out_queue.put_nowait, rec)
         except Exception as e: 
             print(f"[DG Callback] Error: {e}")
 
     def start_dg(channels: int = 1):
-        print(f"[DG Worker] Initializing Deepgram ({channels} ch, High-Stability Mode)...")
+        print(f"[DG Worker] Initializing Deepgram ({channels} ch, High-Stability Mode)...", flush=True)
         try:
             conn = client.listen.live.v("1")
             conn.on(LiveTranscriptionEvents.Transcript, on_message)
-            conn.on(LiveTranscriptionEvents.Error, lambda s, e, **kw: print(f"[DG] Global Error: {e}"))
+            conn.on(LiveTranscriptionEvents.Error, lambda s, e, **kw: print(f"[DG] Global Error: {e}", flush=True))
             options = LiveOptions(
                 model="nova-2", 
                 language="cs", 
@@ -207,27 +204,24 @@ async def transcription_engine_worker(in_queue: asyncio.Queue, out_queue: asynci
                 utterance_end_ms=1000
             )
             if conn.start(options) is False: 
-                print("[DG Worker] Failed to start connection.")
+                print("[DG Worker] Failed to start connection.", flush=True)
                 return None
             return conn
         except Exception as e:
-            print(f"[DG Worker] Connection crash: {e}")
+            print(f"[DG Worker] Connection crash: {e}", flush=True)
             return None
 
     try:
         while True:
             chunk: AudioChunk = await in_queue.get()
-            
-            # Detekce kanálů
             raw_audio = base64.b64decode(chunk.audio_data)
             n_samples_total = len(raw_audio) // 2
             detected_channels = int(round(n_samples_total / (16000 * (chunk.duration_ms / 1000))))
             if detected_channels < 1: detected_channels = 1
             
-            # Restart hovoru při změně ID relace nebo počtu kanálů
             if current_session_id != chunk.session_id or dg_current_channels != detected_channels:
                 if dg_connection: 
-                    print(f"[DG Worker] Resetting connection (New Session or Channel Change: {dg_current_channels}->{detected_channels})")
+                    print(f"[DG Worker] Resetting connection (New Session or Channel Change: {dg_current_channels}->{detected_channels})", flush=True)
                     dg_connection.finish()
                 dg_connection = start_dg(channels=detected_channels)
                 current_session_id = chunk.session_id
@@ -242,11 +236,18 @@ async def transcription_engine_worker(in_queue: asyncio.Queue, out_queue: asynci
             try:
                 dg_connection.send(raw_audio)
             except Exception as e:
-                print(f"[DG Worker] Send error: {e}. Retrying...")
+                print(f"[DG Worker] Send error: {e}. Attempting reconnection...", flush=True)
                 dg_connection = start_dg(channels=detected_channels)
-                if dg_connection: dg_connection.send(raw_audio)
+                if dg_connection: 
+                    try:
+                        dg_connection.send(raw_audio)
+                    except:
+                        print("[DG Worker] Reconnection failed to send.", flush=True)
             in_queue.task_done()
-    except asyncio.CancelledError: pass
+    except asyncio.CancelledError: 
+        print("[DG Worker] Task cancelled.", flush=True)
+    except Exception as e:
+        print(f"[DG Worker] CRITICAL TASK ERROR: {e}", flush=True)
     finally:
         if dg_connection: dg_connection.finish()
 
@@ -263,55 +264,62 @@ async def record_compiler_worker_broadcasting(win_q: asyncio.Queue, diar_q: asyn
 
 async def llm_classifier_worker(in_queue: asyncio.Queue, out_queue: asyncio.Queue):
     """LLM-based incremental classification worker using sliding window context."""
-    from openai import AsyncOpenAI
-    openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    from prompts import CLASSIFIER_SYSTEM_PROMPT
-    
-    history_buffer = []
-    last_analysis_time = 0
-    start_time = time.time()
-    
-    while True:
-        record: TranscriptionRecord = await in_queue.get()
-        history_buffer.append(record)
+    print("[Classifier] Worker entering function...", flush=True)
+    try:
+        openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        history_buffer = []
+        last_analysis_time = 0
         
-        current_time = time.time()
-        if len(history_buffer) >= 5 and (current_time - last_analysis_time > 10):
-            context_lines = [f"{r.speaker_id}: {r.text}" for r in history_buffer[-20:]]
-            context = "\n".join(context_lines)
-            unique_speakers = len(set(r.speaker_id for r in history_buffer[-20:]))
+        print("[Classifier] Worker initialized and ready.", flush=True)
+        while True:
+            record: TranscriptionRecord = await in_queue.get()
+            history_buffer.append(record)
+            print(f"[Classifier] Buffered 1 record (Total: {len(history_buffer)})", flush=True)
             
-            try:
-                response = await openai_client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {"role": "system", "content": CLASSIFIER_SYSTEM_PROMPT},
-                        {"role": "user", "content": f"Participants: {unique_speakers}. Context:\n\n{context}"}
-                    ],
-                    response_format={"type": "json_object"}
-                )
-                raw_payload = json.loads(response.choices[0].message.content)
+            current_time = time.time()
+            time_since_last = current_time - last_analysis_time
+            
+            if len(history_buffer) >= 3 and (last_analysis_time == 0 or time_since_last > 5):
+                print(f"[Classifier] TRIGGERED! count={len(history_buffer)}, last_analysis={last_analysis_time}", flush=True)
+                context_lines = [f"{r.speaker_id}: {r.text}" for r in history_buffer[-20:]]
+                context = "\n".join(context_lines)
+                unique_speakers = len(set(r.speaker_id for r in history_buffer[-20:]))
                 
-                result = ClassificationResult(
-                    session_id=record.session_id,
-                    classification=raw_payload.get("classification", "topic_based"),
-                    confidence=raw_payload.get("confidence", 0.0),
-                    topics=raw_payload.get("topics", []),
-                    privacy_signals=raw_payload.get("privacy_signals", []),
-                    dominant_topic=raw_payload.get("dominant_topic", ""),
-                    sentiment=raw_payload.get("sentiment", "neutral"),
-                    participants_count=unique_speakers,
-                    total_duration_s=round(time.time() - start_time, 1),
-                    model_used="deepgram-nova2 + gpt-4o-mini"
-                )
+                print(f"[Classifier] Triggering analysis on {len(history_buffer)} records...", flush=True)
                 
-                await out_queue.put(result)
-                last_analysis_time = time.time()
-                print(f"[Classifier] Result: {result.classification}")
-            except Exception as e:
-                print(f"[Classifier] Error: {e}")
-        
-        in_queue.task_done()
+                try:
+                    response = await openai_client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[
+                            {"role": "system", "content": CLASSIFIER_SYSTEM_PROMPT},
+                            {"role": "user", "content": f"Participants: {unique_speakers}. Context:\n\n{context}"}
+                        ],
+                        response_format={"type": "json_object"}
+                    )
+                    raw_payload = json.loads(response.choices[0].message.content)
+                    
+                    result = ClassificationResult(
+                        session_id=record.session_id,
+                        classification=raw_payload.get("classification", "topic_based"),
+                        confidence=raw_payload.get("confidence", 0.0),
+                        topics=raw_payload.get("topics", []),
+                        privacy_signals=raw_payload.get("privacy_signals", []),
+                        dominant_topic=raw_payload.get("dominant_topic", "General"),
+                        sentiment=raw_payload.get("sentiment", "neutral"),
+                        participants_count=unique_speakers,
+                        total_duration_s=record.timestamp_end,
+                        model_used="deepgram-nova2 + gpt-4o-mini"
+                    )
+                    
+                    await out_queue.put(result)
+                    last_analysis_time = time.time()
+                    print(f"[Classifier] Success: {result.classification} sent to broadcaster.", flush=True)
+                except Exception as e:
+                    print(f"[Classifier] ERROR during API call or processing: {e}", flush=True)
+            
+            in_queue.task_done()
+    except Exception as e:
+        print(f"[Classifier] CRITICAL WORKER ERROR: {e}", flush=True)
 
 async def speaker_diarization_worker(in_queue: asyncio.Queue, out_queue: asyncio.Queue):
     """Placeholder for modular diarization (currently handled by Deepgram)."""

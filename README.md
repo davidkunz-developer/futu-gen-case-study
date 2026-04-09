@@ -22,7 +22,7 @@ Ačkoliv původní zadání zmiňovalo OpenAI Whisper, naše architektonická an
 2. **Streamingová diarizace**: Deepgram poskytuje nativní separaci mluvčích přímo ve výsledcích živého streamu. U Whisperu by to vyžadovalo další post-processing (např. Pyannote), což narušuje zážitek z reálného času.
 3. **Pokročilá podpora více kanálů**: Naše implementace podporuje pravé stereo, kde mapujeme levý/pravý kanál přímo na ID mluvčích – funkce, která u běžných implementací Whisperu pro streaming chybí.
 
-**Poznámka k modularitě**: Architektura systému je plně modulární. Pokud by požadavky striktně vyžadovaly OpenAI Whisper, lze pracovníka `transcription_engine_worker` ve `functions.py` snadno vyměnit. Pro účely této případové studie byl však zvolen Deepgram, aby demonstroval špičkové řešení s nejnižší latencí, které přesahuje základní požadavky.
+**Poznámka k modularitě**: Architektura systému je plně modulární. Pokud by požadavky striktně vyžadovaly OpenAI Whisper, lze `transcription_engine_worker` ve `functions.py` snadno vyměnit. Pro účely této případové studie byl však zvolen Deepgram, aby demonstroval špičkové řešení s nejnižší latencí, které přesahuje základní požadavky.
 
 ## Instalace a nastavení
 
