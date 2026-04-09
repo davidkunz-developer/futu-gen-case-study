@@ -20,7 +20,9 @@ Ačkoliv původní zadání zmiňovalo OpenAI Whisper, naše architektonická an
 
 1. **Latence pod sekundu**: API OpenAI Whisper (založené na REST) vyžaduje nahrávání delších audio úseků, což vede k výraznému zpoždění. Deepgram využívá kontinuální WebSocket stream, což umožňuje latenci pod 500ms.
 2. **Streamingová diarizace**: Deepgram poskytuje nativní separaci mluvčích přímo ve výsledcích živého streamu. U Whisperu by to vyžadovalo další post-processing (např. Pyannote), což narušuje zážitek z reálného času.
-3. **Pokročilá podpora více kanálů**: Naše implementace podporuje pravé stereo, kde mapujeme levý/pravý kanál přímo na ID mluvčích – funkce, která u běžných implementací Whisperu pro streaming chybí.
+3. **Hybridní Strategie Diarizace**: Naše pipeline inteligentně přepíná metodu identifikace mluvčích podle vstupu:
+    - **Stereo (2+ kanály)**: Využíváme přímé mapování kanálů na mluvčí (např. kanál 0 = S1, kanál 1 = S2). To zaručuje 100% přesnost rozlišení operátora a klienta u profesionálních nahrávek.
+    - **Mono (Mikrofon/Upload)**: Automaticky aktivujeme Deepgram Diarizaci, která identifikuje mluvčí na základě hlasových vzorců v rámci jednoho kanálu.
 
 **Poznámka k modularitě**: Architektura systému je plně modulární. Pokud by požadavky striktně vyžadovaly OpenAI Whisper, lze `transcription_engine_worker` ve `functions.py` snadno vyměnit. Pro účely této případové studie byl však zvolen Deepgram, aby demonstroval špičkové řešení s nejnižší latencí, které přesahuje základní požadavky.
 
