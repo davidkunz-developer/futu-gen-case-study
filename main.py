@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse
 
 load_dotenv()
 
@@ -155,7 +155,7 @@ async def stop_stream():
     print("[Intake] Stream stopped.")
     return {"status": "stopped"}
 
-@app.get("/")
+@app.get("/api/status")
 async def status():
     """Returns current system status."""
     return {
@@ -176,6 +176,12 @@ async def websocket_stream(websocket: WebSocket):
     except WebSocketDisconnect:
         connected_clients.discard(websocket)
         print(f"[WS] Client disconnected. Total: {len(connected_clients)}")
+
+# Mount frontend
+if os.path.exists("frontend/dist"):
+    app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="frontend")
+else:
+    print("[Warning] frontend/dist not found. Frontend will not be served.")
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=False)

@@ -1,6 +1,15 @@
+# --- Stage 1: Build Frontend ---
+FROM node:20-slim AS frontend-builder
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ ./
+RUN npm run build
+
+# --- Stage 2: Final Image ---
 FROM python:3.10-slim
 
-# Instalace systémových závislostí pro audio a pyannote/whisper
+# Instalace systémových závislostí
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     libsndfile1 \
@@ -11,12 +20,15 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Kopírování requirements a intalace
+# Kopírování requirements a instalace
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Kopírování zbytku kódu
+# Kopírování backendového kódu
 COPY . .
+
+# Kopírování buildu frontendu z 1. fáze
+COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
 # Expose FastAPI port
 EXPOSE 8000
